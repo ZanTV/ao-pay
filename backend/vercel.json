@@ -1,13 +1,13 @@
 {
   "version": 2,
-  "installCommand": "cd .. && npm install",
-  "buildCommand": "cd .. && npm run vercel-build --workspace=backend",
+  "installCommand": "npm install",
+  "buildCommand": "npm run vercel-build --workspace=backend",
   "functions": {
-    "api/index.ts": {
+    "backend/api/index.ts": {
       "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api" }
+    { "source": "/(.*)", "destination": "/backend/api" }
   ]
 }

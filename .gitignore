@@ -16,3 +16,5 @@ coverage/
 uploads/
 .prisma/
 .vercel
+
+.vercel
