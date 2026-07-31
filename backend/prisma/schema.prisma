@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+enum PaymentType {
+  ONE_TIME
+  PARTIAL
+  INSTALLMENTS
+}
+
+enum PaymentLinkStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+  ARCHIVED
+  DELETED
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AuditAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  PAYMENT
+  REFUND
+  EXPORT
+  SETTINGS_CHANGE
+}
+
+model Admin {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatar        String?
+  role          UserRole  @default(ADMIN)
+  isActive      Boolean   @default(true)
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String?
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  devices       Device[]
+  auditLogs     AuditLog[]
+  paymentLinks  PaymentLink[]
+  refunds       Refund[]
+  passkeys      Passkey[]
+
+  @@map("admins")
+}
+
+model Passkey {
+  id           String   @id @default(uuid())
+  adminId      String
+  credentialId String   @unique
+  publicKey    String
+  counter      Int      @default(0)
+  deviceName   String?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("passkeys")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  adminId      String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("sessions")
+}
+
+model Device {
+  id          String   @id @default(uuid())
+  adminId     String
+  fingerprint String
+  name        String?
+  userAgent   String?
+  ipAddress   String?
+  country     String?
+  isTrusted   Boolean  @default(false)
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, fingerprint])
+  @@map("devices")
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  email       String
+  fullName    String
+  phone       String?
+  company     String?
+  country     String?
+  fraudScore  Float    @default(0)
+  totalPaid   Decimal  @default(0) @db.Decimal(18, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+  paymentLinks PaymentLink[]
+
+  @@unique([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+model PaymentLink {
+  id                  String            @id @default(uuid())
+  token               String            @unique
+  tokenSignature      String
+  adminId             String
+  customerId          String?
+  customerName        String
+  customerEmail       String
+  customerPhone       String?
+  country             String?
+  currency            String            @default("USD")
+  amount              Decimal           @db.Decimal(18, 2)
+  description         String?
+  invoiceNumber       String?
+  paymentType         PaymentType       @default(ONE_TIME)
+  expiresAt           DateTime?
+  maxAttempts         Int               @default(3)
+  attemptCount        Int               @default(0)
+  successUrl          String?
+  cancelUrl           String?
+  webhookUrl          String?
+  notes               String?
+  status              PaymentLinkStatus @default(ACTIVE)
+  qrCodeUrl           String?
+  metadata            Json?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  admin        Admin         @relation(fields: [adminId], references: [id])
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  transactions Transaction[]
+  invoice      Invoice?
+
+  @@index([status])
+  @@index([customerEmail])
+  @@index([expiresAt])
+  @@map("payment_links")
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  paymentLinkId String   @unique
+  invoiceNumber String   @unique
+  subtotal      Decimal  @db.Decimal(18, 2)
+  taxAmount     Decimal  @default(0) @db.Decimal(18, 2)
+  taxRate       Decimal  @default(0) @db.Decimal(5, 2)
+  total         Decimal  @db.Decimal(18, 2)
+  currency      String
+  pdfUrl        String?
+  createdAt     DateTime @default(now())
+
+  paymentLink PaymentLink @relation(fields: [paymentLinkId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  paymentLinkId   String
+  customerId      String?
+  gatewayId       String?
+  paymentMethodId String?
+  externalId      String?
+  amount          Decimal           @db.Decimal(18, 2)
+  fee             Decimal           @default(0) @db.Decimal(18, 2)
+  total           Decimal           @db.Decimal(18, 2)
+  currency        String
+  status          TransactionStatus @default(PENDING)
+  paymentMethod   String?
+  customerName    String?
+  customerEmail   String?
+  customerPhone   String?
+  ipAddress       String?
+  userAgent       String?
+  country         String?
+  receiptUrl      String?
+  metadata        Json?
+  paidAt          DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  paymentLink   PaymentLink    @relation(fields: [paymentLinkId], references: [id])
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  gateway       Gateway?       @relation(fields: [gatewayId], references: [id])
+  method        PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  refunds       Refund[]
+  notifications Notification[]
+
+  @@index([status])
+  @@index([externalId])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model Gateway {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  displayName String
+  isActive    Boolean  @default(true)
+  isTestMode  Boolean  @default(true)
+  config      Json?
+  supportedCurrencies String[]
+  supportedMethods    String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@map("gateways")
+}
+
+model Currency {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  symbol    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("currencies")
+}
+
+model PaymentMethod {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  icon        String?
+  isActive    Boolean  @default(true)
+  gatewaySlug String?
+  createdAt   DateTime @default(now())
+
+  transactions Transaction[]
+
+  @@map("payment_methods")
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  transactionId String
+  adminId       String
+  amount        Decimal      @db.Decimal(18, 2)
+  reason        String?
+  status        RefundStatus @default(PENDING)
+  externalId    String?
+  metadata      Json?
+  processedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  admin       Admin       @relation(fields: [adminId], references: [id])
+
+  @@index([transactionId])
+  @@map("refunds")
+}
+
+model Notification {
+  id            String              @id @default(uuid())
+  transactionId String?
+  channel       NotificationChannel
+  recipient     String
+  subject       String?
+  body          String
+  status        NotificationStatus  @default(PENDING)
+  sentAt        DateTime?
+  error         String?
+  createdAt     DateTime            @default(now())
+
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([status])
+  @@map("notifications")
+}
+
+model Webhook {
+  id          String   @id @default(uuid())
+  url         String
+  secret      String
+  events      String[]
+  isActive    Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("webhooks")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  adminId   String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  admin Admin? @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
