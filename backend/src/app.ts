@@ -32,3 +32,7 @@ export function createApp() {
 
   return app;
 }
+
+// Vercel Express service requires a default export
+const app = createApp();
+export default app;

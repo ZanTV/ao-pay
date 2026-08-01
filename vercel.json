@@ -1,18 +1,23 @@
 {
-  "version": 2,
-  "installCommand": "npm install",
-  "buildCommand": "npm run vercel-build --workspace=backend && npm run build --workspace=frontend",
-  "outputDirectory": "frontend/dist",
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 30,
-      "memory": 1024,
-      "includeFiles": "backend/{src,prisma}/**"
+  "services": {
+    "frontend": {
+      "root": "frontend/",
+      "framework": "vite",
+      "installCommand": "cd .. && npm install --include=dev",
+      "buildCommand": "cd .. && npm run build --workspace=frontend",
+      "outputDirectory": "dist"
+    },
+    "backend": {
+      "root": "backend/",
+      "framework": "express",
+      "entrypoint": "src/app.ts",
+      "installCommand": "cd .. && npm install --include=dev",
+      "buildCommand": "cd .. && npm run vercel-build --workspace=backend"
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/health", "destination": "/api" },
-    { "source": "/((?!api/)(?!assets/).*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/health", "destination": { "service": "backend" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
   ]
 }
