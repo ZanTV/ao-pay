@@ -17,6 +17,10 @@ export function createApp() {
     res.json({ status: 'ok', service: 'AO PAY API', timestamp: new Date().toISOString() });
   });
 
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', service: 'AO PAY API', timestamp: new Date().toISOString() });
+  });
+
   app.use('/api/auth', authRoutes);
   app.use('/api/payment-links', paymentLinkRoutes);
   app.use('/api/payments', paymentRoutes);
