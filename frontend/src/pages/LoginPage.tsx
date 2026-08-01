@@ -37,8 +37,15 @@ export default function LoginPage() {
       setError('');
       await login(data.email, data.password);
       navigate('/admin');
-    } catch {
-      setError('Invalid email or password');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string }; status?: number }; message?: string };
+      if (!axiosErr.response) {
+        setError('Cannot reach server. API is not available — check deployment.');
+      } else if (axiosErr.response.status === 401) {
+        setError('Invalid email or password');
+      } else {
+        setError(axiosErr.response.data?.message || 'Login failed. Try again.');
+      }
     }
   };
 
